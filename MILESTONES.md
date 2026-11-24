@@ -4,6 +4,11 @@ Record completed milestones for the NovaStar T10 USB editor here, newest first. 
 
 ## Completed milestones
 
+### 2026-11-24 — Milestone commit format
+
+- Standardized milestone commit messages as `feat: <changes>`.
+- Git whitespace check passed for the Markdown changes.
+
 ### 2026-11-24 — Initial USB editor
 
 - Added the .NET 10 WPF editor and package library for creating and editing ViPlex packages, exporting to a folder, writing to USB, and restoring backups.
