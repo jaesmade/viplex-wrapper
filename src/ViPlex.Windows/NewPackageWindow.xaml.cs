@@ -20,12 +20,24 @@ internal partial class NewPackageWindow : Window
 {
     private readonly ObservableCollection<MediaChoice> media = [];
     private readonly Func<NewPackageDraft, Task> createPackage;
+    private readonly string? setName;
     private bool creating;
 
-    public NewPackageWindow(Func<NewPackageDraft, Task> createPackage)
+    public NewPackageWindow(Func<NewPackageDraft, Task> createPackage, string? setName = null)
     {
         this.createPackage = createPackage;
+        this.setName = setName;
         InitializeComponent();
+        if (setName is not null)
+        {
+            Title = DialogHeading.Text = $"Create {setName}";
+            ProgramInput.Text = setName;
+            CredentialsInputs.Visibility = Visibility.Collapsed;
+            PlaylistHeading.Text = "Set pages";
+            AddPagesButton.Content = "Add pages…";
+            CreateButton.Content = "Create set";
+        }
+
         Playlist.ItemsSource = media;
         Loaded += (_, _) => ProgramInput.Focus();
     }
@@ -34,7 +46,7 @@ internal partial class NewPackageWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Add pages to the USB program",
+            Title = setName is null ? "Add pages to the USB program" : $"Add pages to {setName}",
             Filter = "Supported media|*.jpg;*.jpeg;*.png;*.mp4",
             Multiselect = true
         };
@@ -96,17 +108,20 @@ internal partial class NewPackageWindow : Window
     {
         var draft = new NewPackageDraft(ProgramInput.Text.Trim(), UserInput.Text.Trim(), PasswordInput.Password,
             media.Select(choice => choice.Path).ToArray());
-        if (string.IsNullOrWhiteSpace(draft.ProgramName) || string.IsNullOrWhiteSpace(draft.PlayerUsername) ||
-            string.IsNullOrWhiteSpace(draft.PlayerPassword) || draft.MediaPaths.Count == 0)
+        var missingCredentials = setName is null && (string.IsNullOrWhiteSpace(draft.PlayerUsername) ||
+            string.IsNullOrWhiteSpace(draft.PlayerPassword));
+        if (string.IsNullOrWhiteSpace(draft.ProgramName) || missingCredentials || draft.MediaPaths.Count == 0)
         {
-            SetFeedback("Enter a program name and the player credentials, and add at least one media file.", error: true);
+            SetFeedback(setName is null
+                ? "Enter a program name and the player credentials, and add at least one media file."
+                : "Enter a program name and add at least one page.", error: true);
             return;
         }
 
         creating = true;
         Inputs.IsEnabled = CreateButton.IsEnabled = CancelButton.IsEnabled = false;
         WorkingProgress.Visibility = Visibility.Visible;
-        SetFeedback("Preparing the program locally…");
+        SetFeedback(setName is null ? "Preparing the program locally…" : $"Preparing {setName} locally…");
         try
         {
             await createPackage(draft);

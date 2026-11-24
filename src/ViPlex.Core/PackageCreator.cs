@@ -5,6 +5,7 @@ namespace ViPlex.Core;
 public static class PackageCreator
 {
     private const int ImageDurationMilliseconds = 10_000;
+    private const string AuthenticationKey = "authenticUserInfos";
 
     public static void Create(
         string stagedNovaPath,
@@ -14,9 +15,38 @@ public static class PackageCreator
         string playerPassword,
         IReadOnlyList<MediaReplacement> pages)
     {
-        PackageFiles.SafeName(programName);
         ArgumentException.ThrowIfNullOrWhiteSpace(playerUsername);
         ArgumentException.ThrowIfNullOrWhiteSpace(playerPassword);
+        var playerCommand = new JsonObject
+        {
+            [AuthenticationKey] = new JsonArray(new JsonObject
+            {
+                ["username"] = playerUsername,
+                ["password"] = playerPassword
+            })
+        };
+        Create(stagedNovaPath, programName, mode, playerCommand, pages);
+    }
+
+    public static void Create(
+        string stagedNovaPath,
+        string programName,
+        PlaybackMode mode,
+        NovaPackage playerSource,
+        IReadOnlyList<MediaReplacement> pages)
+    {
+        ArgumentNullException.ThrowIfNull(playerSource);
+        Create(stagedNovaPath, programName, mode, playerSource.Command, pages);
+    }
+
+    private static void Create(
+        string stagedNovaPath,
+        string programName,
+        PlaybackMode mode,
+        JsonObject playerCommand,
+        IReadOnlyList<MediaReplacement> pages)
+    {
+        PackageFiles.SafeName(programName);
         ArgumentNullException.ThrowIfNull(pages);
         if (!Enum.IsDefined(mode))
             throw new ArgumentOutOfRangeException(nameof(mode));
@@ -26,7 +56,7 @@ public static class PackageCreator
         string destination = PackageFiles.NormalizePath(stagedNovaPath);
         PackageFiles.Stage(destination, temporary =>
         {
-            WritePackage(temporary, programName, mode, playerUsername, playerPassword, pages);
+            WritePackage(temporary, programName, mode, playerCommand, pages);
             _ = NovaPackage.Open(temporary);
         });
     }
@@ -35,8 +65,7 @@ public static class PackageCreator
         string root,
         string programName,
         PlaybackMode mode,
-        string playerUsername,
-        string playerPassword,
+        JsonObject playerCommand,
         IReadOnlyList<MediaReplacement> pages)
     {
         string programDirectory = Directory.CreateDirectory(Path.Combine(root, "program", programName)).FullName;
@@ -107,13 +136,11 @@ public static class PackageCreator
                 ["version"] = "1.0",
                 ["size"] = CommandSize.Calculate(resources.Values, pages.Count, CommandSizeBasis.Resource),
                 ["isOverride"] = import
-            }),
-            ["authenticUserInfos"] = new JsonArray(new JsonObject
-            {
-                ["username"] = playerUsername,
-                ["password"] = playerPassword
             })
         };
+        if (playerCommand.TryGetPropertyValue(AuthenticationKey, out var authentication))
+            command[AuthenticationKey] = authentication?.DeepClone();
+
         PackageJson.WriteCommand(Path.Combine(root, NovaPackage.CommandFileName), command);
     }
 

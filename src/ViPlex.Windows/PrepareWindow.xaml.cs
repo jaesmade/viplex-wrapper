@@ -7,11 +7,13 @@ namespace ViPlex.Windows;
 
 public partial class PrepareWindow : Window
 {
-    public PrepareWindow(string programName, string programSummary, PlaybackMode mode,
+    public PrepareWindow(string setName, string programName, string programSummary, PlaybackMode mode,
         string? destinationRoot = null, string? destinationVolumeIdentity = null, bool writeToUsb = false)
     {
         InitializeComponent();
-        ProgramLabel.Text = programName;
+        SetLabel.Text = setName;
+        ProgramLabel.Text = $"Program  ·  {programName}";
+        ProgramLabel.ToolTip = programName;
         ProgramSummary.Text = programSummary;
         PlugAndPlay.IsChecked = mode == PlaybackMode.PlugAndPlay;
         CopyAndReplace.IsChecked = mode == PlaybackMode.CopyAndReplace;
@@ -85,7 +87,7 @@ public partial class PrepareWindow : Window
         WriteToUsb = writeToUsb;
         DestinationError.Visibility = Visibility.Collapsed;
         DestinationLabel.Text = Path.Combine(root, "nova");
-        PublishButton.Content = WriteToUsb ? "Write to USB" : "Export folder";
+        PublishButton.Content = WriteToUsb ? "Write to USB" : "Export set";
         PublishButton.IsEnabled = DestinationRoot is not null;
     }
 

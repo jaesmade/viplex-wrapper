@@ -64,6 +64,52 @@ try
         Require(!Directory.Exists(staged), "An empty selection left a publishable package");
     });
 
+    Check("A new set uses its own ordered pages and the source player authentication", () =>
+    {
+        var source = Open("picture");
+        var sourceSnapshot = Snapshot(source.NovaPath).ToArray();
+        var authentication = ReadCommand(source.NovaPath)["authenticUserInfos"];
+        Require(authentication is not null, "The source fixture must contain player authentication");
+        var video = Open("multivid").Pages[0];
+        var image = Open("multipic").Pages[1];
+        var staged = Path.Combine(scratch, "second-set", "nova");
+
+        PackageCreator.Create(staged, "Set 2", PlaybackMode.PlugAndPlay, source, new MediaReplacement[]
+        {
+            new(video.MediaPath, video.ThumbnailPath),
+            new(image.MediaPath, image.ThumbnailPath),
+        });
+
+        var prepared = NovaPackage.Open(staged);
+        Require(prepared.ProgramName == "Set 2" && prepared.Mode == PlaybackMode.PlugAndPlay, "New set has the wrong name or mode");
+        Require(prepared.Pages.Select(page => Path.GetFileName(page.MediaPath)).SequenceEqual(new[]
+        {
+            Path.GetFileName(video.MediaPath), Path.GetFileName(image.MediaPath),
+        }), "New set has the wrong pages or playback order");
+        Require(JsonNode.DeepEquals(ReadCommand(staged)["authenticUserInfos"], authentication), "New set changed player authentication");
+        Require(Snapshot(source.NovaPath).SequenceEqual(sourceSnapshot), "Creating another set changed the source package");
+        VerifyCommand(prepared);
+    });
+
+    Check("A new set preserves absent player authentication", () =>
+    {
+        var source = Open("picture");
+        var sourcePath = Stage("without-authentication", source, source.Mode);
+        var command = ReadCommand(sourcePath);
+        command.Remove("authenticUserInfos");
+        File.WriteAllText(Path.Combine(sourcePath, "command.json"), Convert.ToBase64String(
+            System.Text.Encoding.UTF8.GetBytes(command.ToJsonString())));
+        var page = source.Pages[0];
+        var staged = Path.Combine(scratch, "set-without-authentication", "nova");
+
+        PackageCreator.Create(staged, "Set 2", source.Mode, NovaPackage.Open(sourcePath), new MediaReplacement[]
+        {
+            new(page.MediaPath, page.ThumbnailPath),
+        });
+
+        Require(!ReadCommand(staged).ContainsKey("authenticUserInfos"), "New set added an absent authentication field");
+    });
+
     Check("No-edit export preserves the entire tree", () =>
     {
         var source = Open("multipic");
@@ -274,7 +320,10 @@ static void RequireFailure(Action action)
 }
 
 static JsonNode Command(string root) =>
-    JsonNode.Parse(Convert.FromBase64String(File.ReadAllText(Path.Combine(root, "command.json"))))!["programInfos"]![0]!;
+    ReadCommand(root)["programInfos"]![0]!;
+
+static JsonObject ReadCommand(string root) =>
+    JsonNode.Parse(Convert.FromBase64String(File.ReadAllText(Path.Combine(root, "command.json"))))!.AsObject();
 
 static void VerifyCommand(NovaPackage package)
 {

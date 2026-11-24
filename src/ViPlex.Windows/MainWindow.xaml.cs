@@ -18,13 +18,11 @@ public partial class MainWindow : Window
 
     private readonly string scratchRoot = Path.Combine(Path.GetTempPath(), $"ViPlex-T10-{Guid.NewGuid():N}");
     private readonly ObservableCollection<ImportedMedia> mediaLibrary = [];
-    private readonly Dictionary<int, ImportedMedia> replacements = [];
-    private readonly HashSet<int> pending = [];
+    private readonly ObservableCollection<PresetSet> sets = [];
 
-    private PackageSnapshot? snapshot;
-    private SuggestedDestination? suggestedDestination;
-    private PlaybackMode selectedMode;
+    private PresetSet? selectedSet;
     private PageRow? selectedPage;
+    private int nextSetNumber = 1;
     private bool busy;
     private bool playing;
 
@@ -32,6 +30,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         MediaStrip.ItemsSource = mediaLibrary;
+        SetSelector.ItemsSource = sets;
     }
 
     private async void Open_Click(object sender, RoutedEventArgs e)
@@ -51,7 +50,7 @@ public partial class MainWindow : Window
             var blank = await Task.Run(() => FindBlankDestination(folder));
             if (blank is null)
             {
-                SetSnapshot(await Task.Run(() => ReadSnapshot(folder)));
+                LoadWorkspace(await Task.Run(() => ReadSnapshot(folder)));
                 Activity.Visibility = Visibility.Collapsed;
             }
             else
@@ -70,8 +69,10 @@ public partial class MainWindow : Window
         }
     }
 
-    private bool ConfirmDiscard() => pending.Count == 0 || MessageBox.Show(this,
-        "Discard the pending page edits?", "Pending edits", MessageBoxButton.YesNo, MessageBoxImage.Warning,
+    private bool HasPendingEdits => sets.Any(set => set.HasPendingEdits);
+
+    private bool ConfirmDiscard() => !HasPendingEdits || MessageBox.Show(this,
+        "Discard the unpublished changes in your preset sets?", "Pending edits", MessageBoxButton.YesNo, MessageBoxImage.Warning,
         MessageBoxResult.No) == MessageBoxResult.Yes;
 
     private static SuggestedDestination? FindBlankDestination(string folder)
@@ -99,23 +100,27 @@ public partial class MainWindow : Window
         var dialog = new NewPackageWindow(async draft =>
         {
             var created = await Task.Run(() => StageNewProgram(draft));
-            SetSnapshot(created.Snapshot);
-            suggestedDestination = destination;
-            SourceStatus.Text = "New program  ·  Prepared locally";
-            SourceStatus.ToolTip = null;
-            foreach (var media in created.Media)
-            {
-                mediaLibrary.Add(media);
-            }
-
-            pending.UnionWith(created.Snapshot.Package.Pages.Select(page => page.Index));
-            UpdateMediaStrip();
-            RefreshPages(selectedIndex: 0);
+            LoadWorkspace(created.Snapshot, destination, created.Media);
         }) { Owner = this };
         dialog.ShowDialog();
     }
 
-    private (PackageSnapshot Snapshot, List<ImportedMedia> Media) StageNewProgram(NewPackageDraft draft)
+    private void NewSet_Click(object sender, RoutedEventArgs e)
+    {
+        if (selectedSet is not { } current)
+        {
+            return;
+        }
+
+        var dialog = new NewPackageWindow(async draft =>
+        {
+            var created = await Task.Run(() => StageNewProgram(draft, current));
+            AddSet(created.Snapshot, created.Media, current.Destination);
+        }, NextSetName) { Owner = this };
+        dialog.ShowDialog();
+    }
+
+    private (PackageSnapshot Snapshot, List<ImportedMedia> Media) StageNewProgram(NewPackageDraft draft, PresetSet? playerSet = null)
     {
         var work = Path.Combine(scratchRoot, Guid.NewGuid().ToString("N"));
         var staged = Path.Combine(work, "nova");
@@ -136,8 +141,16 @@ public partial class MainWindow : Window
                 }
             }
 
-            PackageCreator.Create(staged, draft.ProgramName, PlaybackMode.PlugAndPlay, draft.PlayerUsername,
-                draft.PlayerPassword, media.Select(asset => asset.Replacement).ToArray());
+            var pages = media.Select(asset => asset.Replacement).ToArray();
+            if (playerSet is null)
+            {
+                PackageCreator.Create(staged, draft.ProgramName, PlaybackMode.PlugAndPlay,
+                    draft.PlayerUsername, draft.PlayerPassword, pages);
+            }
+            else
+            {
+                PackageCreator.Create(staged, draft.ProgramName, playerSet.Mode, playerSet.Snapshot.Package, pages);
+            }
             return (ReadSnapshot(staged), media);
         }
         catch
@@ -182,34 +195,62 @@ public partial class MainWindow : Window
         return image;
     }
 
-    private void SetSnapshot(PackageSnapshot? loaded, int preferredPageIndex = 0)
+    private string NextSetName => $"Set {nextSetNumber}";
+
+    private void LoadWorkspace(PackageSnapshot loaded, SuggestedDestination? destination = null,
+        IReadOnlyList<ImportedMedia>? media = null)
     {
-        var isNewSource = snapshot is null || loaded is null || !SamePath(snapshot.Package.NovaPath, loaded.Package.NovaPath);
-        snapshot = loaded;
-        suggestedDestination = null;
-        if (loaded is not null)
+        sets.Clear();
+        mediaLibrary.Clear();
+        nextSetNumber = 1;
+        AddSet(loaded, media, destination);
+    }
+
+    private void AddSet(PackageSnapshot snapshot, IReadOnlyList<ImportedMedia>? media = null,
+        SuggestedDestination? destination = null)
+    {
+        var set = new PresetSet(NextSetName, snapshot, destination, isNew: media is not null);
+        nextSetNumber++;
+        if (media is not null)
         {
-            selectedMode = loaded.Package.Mode;
+            set.Pending.UnionWith(snapshot.Package.Pages.Select(page => page.Index));
+            foreach (var asset in media)
+            {
+                mediaLibrary.Add(asset);
+            }
         }
 
-        replacements.Clear();
-        pending.Clear();
-        if (isNewSource)
-        {
-            mediaLibrary.Clear();
-        }
+        sets.Add(set);
+        SetSelector.SelectedItem = set;
+    }
 
-        ProgramName.Text = loaded?.Package.ProgramName ?? "No program loaded";
-        ProgramName.ToolTip = loaded?.Package.ProgramName;
-        SourceStatus.Text = loaded is null ? "No export open" : $"Source  ·  {loaded.Package.NovaPath}";
-        SourceStatus.ToolTip = loaded?.Package.NovaPath;
+    private void SetSelection_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        SetImageEditing(false);
+        selectedSet = SetSelector.SelectedItem as PresetSet;
+        RefreshSelectedSet();
+    }
+
+    private void RefreshSelectedSet()
+    {
+        ProgramName.Text = selectedSet?.Snapshot.Package.ProgramName ?? "No program loaded";
+        ProgramName.ToolTip = selectedSet?.Snapshot.Package.ProgramName;
+        SourceStatus.Text = selectedSet switch
+        {
+            null => "No export open",
+            { IsNew: true } => "New program  ·  Prepared locally",
+            { SourceCopied: true } set => $"Source copy  ·  {set.OriginalSourcePath}",
+            { } set => $"Source  ·  {set.OriginalSourcePath}"
+        };
+        SourceStatus.ToolTip = selectedSet is { IsNew: false } source ? source.OriginalSourcePath : null;
         UpdateMediaStrip();
-        RefreshPages(preferredPageIndex);
+        RefreshPages(selectedSet?.SelectedPageIndex ?? 0);
+        UpdateActions();
     }
 
     private void RefreshPages(int selectedIndex)
     {
-        if (snapshot is null)
+        if (selectedSet is not { Snapshot: var snapshot } set)
         {
             PageList.ItemsSource = null;
             ProgramSummary.Text = "Open a folder to load or create a program.";
@@ -217,16 +258,19 @@ public partial class MainWindow : Window
             return;
         }
 
+        var keepEditingImage = editingImage && selectedPage?.Index == selectedIndex;
         var rows = snapshot.Package.Pages.Select(page =>
         {
-            replacements.TryGetValue(page.Index, out var imported);
+            set.Replacements.TryGetValue(page.Index, out var imported);
             return new PageRow(page, imported, imported is null ? snapshot.Previews[page.Index] : imported.Thumbnail,
-                pending.Contains(page.Index));
+                set.IsPagePending(page.Index));
         }).ToList();
         PageList.ItemsSource = rows;
         PageList.SelectedItem = rows.Find(row => row.Index == selectedIndex) ?? rows.FirstOrDefault();
+        SetImageEditing(keepEditingImage);
         ProgramSummary.Text = $"{rows.Count} {(rows.Count == 1 ? "page" : "pages")}  ·  {FormatDuration(rows.Sum(row => (long)row.Duration))}";
-        EditStatus.Text = pending.Count == 0 ? "No pending edits" : $"{pending.Count} {(pending.Count == 1 ? "page" : "pages")} pending";
+        var pendingPages = rows.Count(row => row.Pending);
+        EditStatus.Text = pendingPages == 0 ? "No pending edits" : $"{pendingPages} {(pendingPages == 1 ? "page" : "pages")} pending";
     }
 
     private void PageSelection_Changed(object sender, SelectionChangedEventArgs e)
@@ -237,10 +281,16 @@ public partial class MainWindow : Window
         ScreenView.Visibility = PropertyScroll.Visibility = hasPage ? Visibility.Visible : Visibility.Collapsed;
         EmptyPreview.Visibility = EmptyProperties.Visibility = hasPage ? Visibility.Collapsed : Visibility.Visible;
         PlayButton.Visibility = selectedPage?.Page.Kind == MediaKind.Video ? Visibility.Visible : Visibility.Collapsed;
-        Poster.Source = selectedPage?.Thumbnail;
+        Poster.Source = selectedPage?.Page.Kind == MediaKind.Video ? selectedPage.Thumbnail : null;
+        SelectPreviewImage();
         if (selectedPage is not { } page)
         {
             return;
+        }
+
+        if (selectedSet is { } set)
+        {
+            set.SelectedPageIndex = page.Index;
         }
 
         SelectedName.Text = page.Name;
@@ -376,14 +426,16 @@ public partial class MainWindow : Window
         }
     }
 
-    private ImportedMedia CacheMedia(string fileName, MediaKind? requiredKind, string? cacheRoot = null)
+    private ImportedMedia CacheMedia(string fileName, MediaKind? requiredKind, string? cacheRoot = null, string? imageName = null)
     {
         var folder = Path.Combine(cacheRoot ?? scratchRoot, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         try
         {
-            var name = Path.GetFileName(fileName);
-            var copy = Path.Combine(folder, name);
+            var name = imageName ?? Path.GetFileName(fileName);
+            var cacheName = imageName is null ? name
+                : ImageComposition.GetImageFileName(imageName, Path.GetExtension(fileName));
+            var copy = Path.Combine(folder, cacheName);
             File.Copy(fileName, copy, overwrite: false);
             var details = MediaInspector.Inspect(copy);
             if (requiredKind is not null && details.Kind != requiredKind)
@@ -465,6 +517,11 @@ public partial class MainWindow : Window
 
     private void ApplyReplacement(PageRow page, ImportedMedia media)
     {
+        if (selectedSet is not { } set)
+        {
+            return;
+        }
+
         if (media.Details.Kind != page.Page.Kind)
         {
             SetReplaceFeedback(page.Page.Kind == MediaKind.Image
@@ -472,13 +529,13 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (replacements.TryGetValue(page.Index, out var current) && ReferenceEquals(current, media))
+        if (set.Replacements.TryGetValue(page.Index, out var current) && ReferenceEquals(current, media))
         {
             return;
         }
 
-        replacements[page.Index] = media;
-        pending.Add(page.Index);
+        set.Replacements[page.Index] = media;
+        set.Pending.Add(page.Index);
         RefreshPages(page.Index);
     }
 
@@ -496,22 +553,23 @@ public partial class MainWindow : Window
 
     private async void Prepare_Click(object sender, RoutedEventArgs e)
     {
-        if (snapshot is not { Package: var source })
+        if (selectedSet is not { Snapshot.Package: var source } set)
         {
             return;
         }
 
-        var dialog = new PrepareWindow(source.ProgramName, ProgramSummary.Text, selectedMode,
-            suggestedDestination?.Root, suggestedDestination?.VolumeIdentity, suggestedDestination?.WriteToUsb == true) { Owner = this };
+        var destination = set.Destination;
+        var dialog = new PrepareWindow(set.Name, source.ProgramName, ProgramSummary.Text, set.Mode,
+            destination?.Root, destination?.VolumeIdentity, destination?.WriteToUsb == true) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.DestinationRoot is not { } root)
         {
             return;
         }
 
         var target = Path.Combine(root, "nova");
-        if (!SamePath(source.NovaPath, target) && (IsInside(source.NovaPath, target) || IsInside(target, source.NovaPath)))
+        if (OverlapsLoadedSource(target))
         {
-            ShowActivity("Choose a different export destination", "The destination nova folder overlaps the open source package.", error: true);
+            ShowActivity("Choose a different export destination", "The destination nova folder overlaps a loaded set’s source package.", error: true);
             return;
         }
 
@@ -521,35 +579,42 @@ public partial class MainWindow : Window
             return;
         }
 
-        var mode = dialog.SelectedMode;
-        var volumeIdentity = dialog.DestinationVolumeIdentity;
-        var writeToUsb = dialog.WriteToUsb;
-        selectedMode = mode;
+        await PublishSetAsync(set, root, dialog.SelectedMode, overwrite, dialog.DestinationVolumeIdentity, dialog.WriteToUsb);
+    }
+
+    private async Task PublishSetAsync(PresetSet set, string root, PlaybackMode mode, bool overwrite,
+        string? volumeIdentity, bool writeToUsb)
+    {
+        var source = set.Snapshot.Package;
+        var target = Path.Combine(root, "nova");
         var work = Path.Combine(scratchRoot, Guid.NewGuid().ToString("N"));
         var staged = Path.Combine(work, "nova");
-        var changes = replacements.ToDictionary(pair => pair.Key, pair => pair.Value.Replacement);
-        var currentIndex = selectedPage?.Index ?? 0;
+        var changes = set.Replacements.ToDictionary(pair => pair.Key, pair => pair.Value.Replacement);
+        var placements = new Dictionary<int, Rect>(set.ImagePlacements);
 
         SetBusy(true);
         CloseVideo();
         try
         {
-            ShowActivity("Preparing package…", target, inProgress: true);
+            ShowActivity($"Preparing {set.Name}…", target, inProgress: true);
             await Task.Run(() =>
             {
                 Directory.CreateDirectory(work);
-                PackageBuilder.Build(source, staged, mode, changes);
+                var export = CreateExportReplacements(source, work, changes, placements);
+                PackageBuilder.Build(source, staged, mode, export);
             });
-            ShowActivity(writeToUsb ? "Writing package to USB…" : "Exporting package…", target, inProgress: true);
-            var result = await Task.Run(() => PackagePublisher.Publish(staged, root, overwrite, BackupRoot, volumeIdentity));
-            pending.Clear();
-            RefreshPages(currentIndex);
-            var note = await ReloadReplacedSourceAsync(result.NovaPath, currentIndex);
-            ShowCompletion(writeToUsb ? "USB package ready" : "Folder export ready", result, note);
+            ShowActivity(writeToUsb ? $"Writing {set.Name} to USB…" : $"Exporting {set.Name}…", target, inProgress: true);
+            var result = await WritePreservingSourceAsync(target, setToReload: null,
+                () => PackagePublisher.Publish(staged, root, overwrite, BackupRoot, volumeIdentity));
+            set.Mode = mode;
+            set.Pending.Clear();
+            set.PublishedImagePlacements = placements;
+            RefreshSelectedSet();
+            ShowCompletion(writeToUsb ? $"{set.Name} written to USB" : $"{set.Name} exported", result, note: null);
         }
-        catch (Exception ex) when (IsFileFailure(ex))
+        catch (Exception ex) when (IsPreviewFailure(ex))
         {
-            ShowActivity("Could not publish package", $"{target}\n{ex.Message}", error: true);
+            ShowActivity($"Could not publish {set.Name}", $"{target}\n{ex.Message}", error: true);
         }
         finally
         {
@@ -577,6 +642,12 @@ public partial class MainWindow : Window
         }
 
         var target = Path.Combine(root, "nova");
+        if (OverlapsLoadedSource(target))
+        {
+            ShowActivity("Choose a different USB drive", "The destination nova folder overlaps a loaded set’s source package.", error: true);
+            return;
+        }
+
         if (!ConfirmOverwrite(target, restoring: true))
         {
             return;
@@ -588,8 +659,9 @@ public partial class MainWindow : Window
         try
         {
             var backupPath = folder.FolderName;
-            var result = await Task.Run(() => PackagePublisher.Restore(backupPath, root, BackupRoot, identity));
-            var note = await ReloadReplacedSourceAsync(result.NovaPath, selectedPage?.Index ?? 0);
+            var result = await WritePreservingSourceAsync(target, selectedSet,
+                () => PackagePublisher.Restore(backupPath, root, BackupRoot, identity));
+            var note = await ReloadRestoredSourceAsync(result.NovaPath);
             ShowCompletion("USB backup restored", result, note);
         }
         catch (Exception ex) when (IsFileFailure(ex))
@@ -605,31 +677,109 @@ public partial class MainWindow : Window
     private bool ConfirmOverwrite(string target, bool restoring)
     {
         var description = restoring ? "Restore the selected backup to" : "Replace the existing nova folder at";
-        var warning = restoring && pending.Count > 0 && snapshot is { } current && SamePath(current.Package.NovaPath, target)
-            ? "\n\nRestoring this drive will close the current set of pending edits." : "";
+        var warning = restoring && selectedSet is { HasPendingEdits: true } set && SamePath(set.Snapshot.Package.NovaPath, target)
+            ? $"\n\nRestoring this drive will discard the pending edits in {set.Name}." : "";
         return MessageBox.Show(this, $"{description}\n\n{target}\n\nAny existing nova folder will be backed up locally.{warning}",
             restoring ? "Confirm USB restore" : "Confirm replacement", MessageBoxButton.YesNo, MessageBoxImage.Warning,
             MessageBoxResult.No) == MessageBoxResult.Yes;
     }
 
-    private async Task<string?> ReloadReplacedSourceAsync(string output, int selectedIndex)
+    private async Task<PublishResult> WritePreservingSourceAsync(string target, PresetSet? setToReload, Func<PublishResult> write)
     {
-        if (snapshot is null || !SamePath(snapshot.Package.NovaPath, output))
+        var set = sets.FirstOrDefault(candidate => candidate != setToReload && SamePath(candidate.Snapshot.Package.NovaPath, target));
+        if (set is null)
+        {
+            return await Task.Run(write);
+        }
+
+        var original = set.Snapshot;
+        var work = Path.Combine(scratchRoot, Guid.NewGuid().ToString("N"));
+        var staged = Path.Combine(work, "nova");
+        PackageSnapshot? copy = null;
+        try
+        {
+            // Keep the original media available for further editing after its source is overwritten.
+            copy = await Task.Run(() =>
+            {
+                Directory.CreateDirectory(work);
+                PackageBuilder.Build(original.Package, staged, original.Package.Mode, new Dictionary<int, MediaReplacement>());
+                return original with { Package = NovaPackage.Open(staged) };
+            });
+            return await Task.Run(write);
+        }
+        catch
+        {
+            // A failed write normally leaves the source intact. Keep the copy if the original is unavailable.
+            if (copy is not null && await Task.Run(() => SourceCommandMatches(target, staged)))
+            {
+                copy = null;
+            }
+
+            throw;
+        }
+        finally
+        {
+            if (copy is null)
+            {
+                await Task.Run(() => DeleteScratch(work));
+            }
+            else
+            {
+                set.Snapshot = copy;
+                set.SourceCopied = true;
+                if (set == selectedSet)
+                {
+                    RefreshSelectedSet();
+                }
+            }
+        }
+    }
+
+    private static bool SourceCommandMatches(string source, string copy)
+    {
+        try
+        {
+            return File.ReadAllBytes(Path.Combine(source, "command.json")).AsSpan()
+                .SequenceEqual(File.ReadAllBytes(Path.Combine(copy, "command.json")));
+        }
+        catch (Exception ex) when (IsFileFailure(ex))
+        {
+            return false;
+        }
+    }
+
+    private async Task<string?> ReloadRestoredSourceAsync(string output)
+    {
+        if (selectedSet is not { } set || !SamePath(set.Snapshot.Package.NovaPath, output))
         {
             return null;
         }
 
         try
         {
-            SetSnapshot(await Task.Run(() => ReadSnapshot(output)), selectedIndex);
+            set.Snapshot = await Task.Run(() => ReadSnapshot(output));
+            set.Mode = set.Snapshot.Package.Mode;
+            set.Replacements.Clear();
+            set.Pending.Clear();
+            set.ImagePlacements.Clear();
+            set.PublishedImagePlacements.Clear();
+            SetImageEditing(false);
+            RefreshSelectedSet();
             return null;
         }
         catch (Exception ex) when (IsFileFailure(ex))
         {
-            SetSnapshot(null);
+            sets.Remove(set);
+            SetSelector.SelectedItem = sets.FirstOrDefault();
             return "Reopen the destination folder to continue editing it.";
         }
     }
+
+    private bool OverlapsLoadedSource(string target) => sets.Any(set =>
+    {
+        var source = set.Snapshot.Package.NovaPath;
+        return !SamePath(source, target) && (IsInside(source, target) || IsInside(target, source));
+    });
 
     private static bool SamePath(string left, string right) => string.Equals(
         Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)),
@@ -679,7 +829,13 @@ public partial class MainWindow : Window
     {
         busy = value;
         Editor.IsEnabled = OpenButton.IsEnabled = RestoreButton.IsEnabled = !value;
-        PrepareButton.IsEnabled = ImportButton.IsEnabled = !value && snapshot is not null;
+        UpdateActions();
+    }
+
+    private void UpdateActions()
+    {
+        SetSelector.IsEnabled = NewSetButton.IsEnabled = PrepareButton.IsEnabled = ImportButton.IsEnabled =
+            !busy && selectedSet is not null;
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -732,6 +888,27 @@ public partial class MainWindow : Window
     private sealed record PackageSnapshot(NovaPackage Package, IReadOnlyDictionary<int, BitmapSource?> Previews);
 
     private sealed record SuggestedDestination(string Root, string? VolumeIdentity, bool WriteToUsb);
+
+    private sealed class PresetSet(string name, PackageSnapshot snapshot, SuggestedDestination? destination, bool isNew)
+    {
+        public string Name { get; } = name;
+        public PackageSnapshot Snapshot { get; set; } = snapshot;
+        public SuggestedDestination? Destination { get; } = destination;
+        public PlaybackMode Mode { get; set; } = snapshot.Package.Mode;
+        public int SelectedPageIndex { get; set; }
+        public bool IsNew { get; } = isNew;
+        public string OriginalSourcePath { get; } = snapshot.Package.NovaPath;
+        public bool SourceCopied { get; set; }
+        public Dictionary<int, ImportedMedia> Replacements { get; } = [];
+        public HashSet<int> Pending { get; } = [];
+        public Dictionary<int, Rect> ImagePlacements { get; } = [];
+        public Dictionary<int, Rect> PublishedImagePlacements { get; set; } = [];
+
+        public bool HasPendingEdits => Snapshot.Package.Pages.Any(page => IsPagePending(page.Index));
+
+        public bool IsPagePending(int index) => Pending.Contains(index) ||
+            ImagePlacements.GetValueOrDefault(index, Rect.Empty) != PublishedImagePlacements.GetValueOrDefault(index, Rect.Empty);
+    }
 
     private sealed record ImportedMedia(string Name, MediaDetails Details, MediaReplacement Replacement, BitmapSource? Thumbnail)
     {
