@@ -1,6 +1,6 @@
 # NovaStar T10 USB Editor
 
-A local Windows editor for the NovaStar T10 installation with a 256 × 768 portrait display. Start with a blank USB or open an existing ViPlex package. Use the editor to replace image or video pages, prepare a `nova/` folder, and write or restore a USB package. The [implementation plan](docs/superpowers/plans/2026-11-24-viplex-usb-wrapper.md) records how the supplied ViPlex exports established the package format.
+A local Windows editor for the NovaStar T10 installation with a 256 × 768 portrait display. Start with a blank USB or open an existing ViPlex package. Use the editor to build and edit preset sets, prepare a `nova/` folder, and write or restore a USB package. The [implementation plan](docs/superpowers/plans/2026-11-24-viplex-usb-wrapper.md) records how the supplied ViPlex exports established the package format.
 
 ## Build and run
 
@@ -11,13 +11,16 @@ dotnet build ViPlexWrapper.slnx
 dotnet run --project src/ViPlex.Windows
 ```
 
+To export a set with video trims or fades, use a Windows FFmpeg build with `libx264`. The editor looks beside `ViPlex.Windows.exe`, in `%LOCALAPPDATA%\ViPlex T10\Tools`, and on `PATH`. [FFmpeg downloads](https://ffmpeg.org/download.html)
+
 ## Create or edit a package
 
 1. Open a USB drive or folder. Its current program opens as **Set 1** with its pages in playback order. If the folder is blank, enter a program name, the T10 connection credentials and the media for Set 1.
-2. Choose **New set…** to add a set with its own ordered pages and the same player settings. Switch sets from the **Preset sets** menu. Each set keeps its page edits during the editing session.
-3. Select a page and replace its media. Image pages accept JPEG or PNG, and video pages accept supported H.264 MP4. Image hold times stay the same, and video durations come from the replacements. Choose **Edit image** to move or resize a still image in the display preview, or **Reset image** to restore its fitted placement.
-4. Choose **Prepare set** to review the selected set and its pages. **Plug and play** plays from the connected USB. **Copy and replace** applies the ViPlex import and overwrite flags.
-5. Choose **Export set** to get a copyable `nova/` folder, or **Write to USB** to stage and verify the same package on a drive Windows reports as removable. The export contains the selected set’s pages in order. If a destination package exists, the app confirms the target before replacing it and saves a local backup.
+2. Choose **New set…** to add another set with the same player settings. Use **Rename…** to label a preset in the editor. Its exported program name comes from the original program or its creation form.
+3. Use **Add pages**, **Duplicate**, **Move up**, **Move down**, and **Remove** to change the selected set’s playlist. Image pages accept JPEG or PNG, and video pages accept supported H.264 MP4. Choose **Edit image** to move or resize a still image, or **Reset image** to restore its fitted placement.
+4. Choose **Edit page…** to name a page and set its repeat count, date range, and playback weekdays. Set a hold time for an image, or trim a video and adjust its volume. You can apply a hold time to all images in the current set. The editor renders fades to or from black into H.264, including fades on still images.
+5. Choose **Prepare set** to review the selected set and its pages. **Plug and play** plays from the connected USB. **Copy and replace** applies the ViPlex import and overwrite flags.
+6. Choose **Export set** to get a copyable `nova/` folder, or **Write to USB** to write the same package to a removable drive. The app asks before replacing an existing destination package and saves a local backup.
 
 Use **Restore USB backup** to restore a prior `nova/` tree. Keep the saved `nova/` and `snapshot.json` together. The ViPlex command contains player connection credentials in its Base64-wrapped content. Keep exports and backups local.
 
@@ -37,7 +40,7 @@ Run the reference checks using the parent folder with `picture`, `videoplayback`
 dotnet run --project tests/ViPlex.Core.Tests -- 'D:\Projects\references\viplex'
 ```
 
-The Release build compiled with zero warnings. All 18 reference checks passed, including creating the first `nova/` folder, updating existing programs, checking the drive identity and restoring a backup. The runner uses temporary directories for all writes. Headless WPF checks covered playlist selection, replacing a page, blank-folder detection, and creating a mixed-media program.
+The runner uses temporary directories for all writes. Reference checks cover package creation, page ordering and editing, playback metadata, export, overwrite, and backup restoration. See [MILESTONES.md](MILESTONES.md) for recorded build and desktop checks.
 
 Hardware validation remains open for the first package made from scratch, the T10 firmware and USB filesystem, Copy and replace across two revisions, and the command size rule when multiple pages reuse one media file. Test an untouched official export first, then use a spare USB to test the wrapper's output.
 

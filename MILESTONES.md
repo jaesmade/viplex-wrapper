@@ -4,6 +4,13 @@ Record completed milestones for the NovaStar T10 USB editor here, newest first. 
 
 ## Completed milestones
 
+### 2026-11-24 — Editable pages and playback
+
+- Added page names, image hold times, and a set-wide hold time action. Added preset renaming and controls to add, duplicate, move, and remove pages within a set.
+- Added per-page repeat counts, date and weekday schedules, and video volume. Video trims and fades to or from black render to H.264 with FFmpeg.
+- The Release build passed with zero warnings, and all 24 reference checks passed. Headless WPF checks covered playback input validation, isolated page editing, and reopening a set export with rendered media and the expected settings.
+- Live file picker interaction, physical USB writes, and playback on the T10 remain unverified.
+
 ### 2026-11-24 — Preset sets and image placement
 
 - Added session-scoped preset sets with independent ordered pages and edits. New sets reuse player authentication from the loaded package. Export and USB write use the selected set.

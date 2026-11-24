@@ -1,0 +1,113 @@
+<Window x:Class="ViPlex.Windows.PagePlaybackWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:ClassModifier="internal" Title="Edit page" Width="552" Height="710" MinHeight="450"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource WindowBrush}" FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="14">
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource CardBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="CaretBrush" Value="{StaticResource TextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="MinHeight" Value="30" />
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Margin" Value="0,0,12,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </Window.Resources>
+    <Grid Margin="22,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="0,0,12,0">
+                <TextBlock Text="Edit page" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,12" />
+                <TextBlock Text="Page name" Style="{StaticResource PropertyLabel}" />
+                <TextBox x:Name="NameInput" AutomationProperties.Name="Page name" MaxLength="120" />
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <StackPanel x:Name="ImageTiming" Margin="0,0,12,0">
+                        <TextBlock Text="Hold time (seconds)" Style="{StaticResource PropertyLabel}" />
+                        <TextBox x:Name="HoldInput" AutomationProperties.Name="Image hold time in seconds" />
+                        <CheckBox x:Name="ApplyAllImages" Content="Apply to all images in this set" Margin="0,8,0,0" />
+                    </StackPanel>
+                    <StackPanel x:Name="VideoAudio" Margin="0,0,12,0">
+                        <TextBlock Text="Video volume (%)" Style="{StaticResource PropertyLabel}" />
+                        <TextBox x:Name="VolumeInput" AutomationProperties.Name="Video volume in percent" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Repeat count" Style="{StaticResource PropertyLabel}" />
+                        <TextBox x:Name="RepeatInput" AutomationProperties.Name="Repeat count" />
+                    </StackPanel>
+                </Grid>
+                <StackPanel x:Name="TrimOptions" Margin="0,14,0,0">
+                    <TextBlock Text="Trim video" Style="{StaticResource SectionTitle}" Margin="0,0,0,7" />
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,12,0">
+                            <TextBlock Text="Start (seconds)" Style="{StaticResource PropertyLabel}" />
+                            <TextBox x:Name="TrimStartInput" AutomationProperties.Name="Trim start in seconds" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="End (seconds)" Style="{StaticResource PropertyLabel}" />
+                            <TextBox x:Name="TrimEndInput" AutomationProperties.Name="Trim end in seconds" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock x:Name="SourceDurationLabel" Style="{StaticResource MutedText}" Margin="0,6,0,0" />
+                </StackPanel>
+                <TextBlock Text="Transitions" Style="{StaticResource SectionTitle}" Margin="0,14,0,7" />
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <StackPanel Margin="0,0,12,0">
+                        <TextBlock Text="Fade in from black (seconds)" Style="{StaticResource PropertyLabel}" />
+                        <TextBox x:Name="FadeInInput" AutomationProperties.Name="Fade in duration in seconds" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Fade out to black (seconds)" Style="{StaticResource PropertyLabel}" />
+                        <TextBox x:Name="FadeOutInput" AutomationProperties.Name="Fade out duration in seconds" />
+                    </StackPanel>
+                </Grid>
+                <TextBlock Text="Use 0 for a cut. Trim and fades render at export with FFmpeg."
+                           Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                <TextBlock Text="Playback schedule" Style="{StaticResource SectionTitle}" Margin="0,14,0,7" />
+                <TextBlock x:Name="ExistingSchedule" Text="This page uses an existing schedule. The export preserves it."
+                           Visibility="Collapsed" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
+                <StackPanel x:Name="ScheduleFields">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,12,0">
+                            <TextBlock Text="From date (optional)" Style="{StaticResource PropertyLabel}" />
+                            <DatePicker x:Name="StartDateInput" AutomationProperties.Name="Playback start date" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Through date (optional)" Style="{StaticResource PropertyLabel}" />
+                            <DatePicker x:Name="EndDateInput" AutomationProperties.Name="Playback end date" />
+                        </StackPanel>
+                    </Grid>
+                    <WrapPanel Margin="0,10,0,0">
+                        <CheckBox x:Name="Monday" Content="Mon" AutomationProperties.Name="Monday" />
+                        <CheckBox x:Name="Tuesday" Content="Tue" AutomationProperties.Name="Tuesday" />
+                        <CheckBox x:Name="Wednesday" Content="Wed" AutomationProperties.Name="Wednesday" />
+                        <CheckBox x:Name="Thursday" Content="Thu" AutomationProperties.Name="Thursday" />
+                        <CheckBox x:Name="Friday" Content="Fri" AutomationProperties.Name="Friday" />
+                        <CheckBox x:Name="Saturday" Content="Sat" AutomationProperties.Name="Saturday" />
+                        <CheckBox x:Name="Sunday" Content="Sun" AutomationProperties.Name="Sunday" />
+                    </WrapPanel>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+        <StackPanel Grid.Row="1" Margin="0,10,0,0">
+            <TextBlock x:Name="Feedback" Foreground="{StaticResource ErrorBrush}" TextWrapping="Wrap"
+                       AutomationProperties.LiveSetting="Polite" Margin="0,0,0,6" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Cancel" IsCancel="True" Margin="0,0,8,0" />
+                <Button Content="Apply changes" Click="Apply_Click" IsDefault="True" Style="{StaticResource PrimaryButton}" />
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Window>

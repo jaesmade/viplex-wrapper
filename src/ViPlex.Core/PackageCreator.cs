@@ -72,9 +72,7 @@ public static class PackageCreator
         string mediaDirectory = Directory.CreateDirectory(Path.Combine(root, "media")).FullName;
         Directory.CreateDirectory(Path.Combine(root, "viplex_terminal", "media"));
 
-        using Stream template = typeof(PackageCreator).Assembly.GetManifestResourceStream("ViPlex.Core.NewPackageDefaults.json")
-            ?? throw new InvalidOperationException("The new-package defaults could not be loaded.");
-        JsonObject defaults = PackageJson.Object(JsonNode.Parse(template), "new-package defaults");
+        JsonObject defaults = ReadDefaults();
         JsonObject playlist = PackageJson.Object(defaults["playlist"], "playlist");
         JsonObject solution = PackageJson.Object(defaults["playSolution"], "playSolution");
         playlist["name"] = programName;
@@ -93,15 +91,9 @@ public static class PackageCreator
             string source = PackageFiles.NormalizePath(page.SourcePath);
             using FileStream sourceFile = File.OpenRead(source);
             MediaDetails media = MediaInspector.Inspect(source);
-            string mediaName = Path.GetFileName(source);
-            string mediaType = media.Kind == MediaKind.Video ? "VIDEO" : "PICTURE";
-            int duration = media.Kind == MediaKind.Image
-                ? ImageDurationMilliseconds
-                : media.DurationMilliseconds ?? throw new InvalidDataException("A video page requires a readable duration.");
-
-            ManifestAsset resource = AddResource(source, sourceFile.Length, media.Kind, mediaType, mediaDirectory, resources);
             ManifestAsset thumbnail = AddThumbnail(page.ThumbnailPath, programDirectory, thumbnails);
-            scenes.Add(CreateScene(defaultScene, index, duration, mediaName, mediaType, resource, thumbnail));
+            var created = CreateMediaPage(defaultScene, index, source, sourceFile.Length, media, thumbnail, mediaDirectory, resources);
+            scenes.Add(created.Scene);
         }
 
         JsonArray playlistEntry = WriteConfiguration(programDirectory, PackageManifest.PlaylistName, playlist);
@@ -142,6 +134,31 @@ public static class PackageCreator
             command[AuthenticationKey] = authentication?.DeepClone();
 
         PackageJson.WriteCommand(Path.Combine(root, NovaPackage.CommandFileName), command);
+    }
+
+    internal static JsonObject ReadDefaultScene()
+    {
+        JsonObject playlist = PackageJson.Object(ReadDefaults()["playlist"], "playlist");
+        return PackageJson.Single(PackageJson.Array(playlist, "sceneItems"), "sceneItems");
+    }
+
+    private static JsonObject ReadDefaults()
+    {
+        using Stream template = typeof(PackageCreator).Assembly.GetManifestResourceStream("ViPlex.Core.NewPackageDefaults.json")
+            ?? throw new InvalidOperationException("The new-package defaults could not be loaded.");
+        return PackageJson.Object(JsonNode.Parse(template), "new-package defaults");
+    }
+
+    internal static (JsonObject Scene, ManifestAsset Resource) CreateMediaPage(
+        JsonObject template, int index, string source, long sourceSize, MediaDetails media, ManifestAsset thumbnail,
+        string mediaDirectory, Dictionary<string, ManifestAsset> resources)
+    {
+        string mediaType = media.Kind == MediaKind.Video ? "VIDEO" : "PICTURE";
+        int duration = media.Kind == MediaKind.Image
+            ? ImageDurationMilliseconds
+            : media.DurationMilliseconds ?? throw new InvalidDataException("A video page requires a readable duration.");
+        ManifestAsset resource = AddResource(source, sourceSize, media.Kind, mediaType, mediaDirectory, resources);
+        return (CreateScene(template, index, duration, Path.GetFileName(source), mediaType, resource, thumbnail), resource);
     }
 
     private static JsonObject CreateScene(
@@ -200,7 +217,7 @@ public static class PackageCreator
         return asset;
     }
 
-    private static ManifestAsset AddThumbnail(string? input, string directory, Dictionary<string, ManifestAsset> thumbnails)
+    internal static ManifestAsset AddThumbnail(string? input, string directory, Dictionary<string, ManifestAsset> thumbnails)
     {
         if (string.IsNullOrWhiteSpace(input))
             throw new InvalidDataException("Every new page needs a JPEG thumbnail.");

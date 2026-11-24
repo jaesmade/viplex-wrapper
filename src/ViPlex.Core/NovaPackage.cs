@@ -14,6 +14,10 @@ public sealed record NovaPage(
     string ThumbnailPath)
 {
     public string MediaName { get; init; } = Name;
+    public int RepeatCount { get; init; } = 1;
+    public int? VideoVolume { get; init; }
+    public PageSchedule? Schedule { get; init; }
+    public bool CanEditSchedule { get; init; } = true;
 }
 
 public sealed record MediaReplacement(string SourcePath, string? ThumbnailPath = null);
@@ -117,9 +121,14 @@ public sealed class NovaPackage
             throw new InvalidDataException("The widget media type or file size does not match the manifest.");
 
         ManifestAsset thumbnail = PackageManifest.FindAsset(Manifest.Thumbnails, PackageJson.String(scene, "thumbnail"));
+        var schedule = PagePlaybackEdits.ReadSchedule(scene, out bool canEditSchedule);
         var entry = new NovaPage(index, PackageJson.RequiredText(page, "name"), kind, duration, media.Path, thumbnail.Path)
         {
-            MediaName = PackageJson.RequiredText(widget, "name")
+            MediaName = PackageJson.RequiredText(widget, "name"),
+            RepeatCount = PagePlaybackEdits.ReadRepeatCount(scene),
+            VideoVolume = PagePlaybackEdits.ReadVideoVolume(widget, kind),
+            Schedule = schedule,
+            CanEditSchedule = canEditSchedule
         };
         return new PageBinding(entry, scene, widget, media, thumbnail);
     }

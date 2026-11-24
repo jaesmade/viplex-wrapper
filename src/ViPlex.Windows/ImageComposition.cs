@@ -37,7 +37,7 @@ internal static class ImageComposition
         var frame = BitmapFrame.Create(bitmap);
 
         Directory.CreateDirectory(directory);
-        var imagePath = Path.Combine(directory, GetImageFileName(originalFileName, ".png"));
+        var imagePath = Path.Combine(directory, GetSafeMediaFileName(originalFileName, ".png"));
         var thumbnailPath = Path.Combine(directory, "thumbnail.jpg");
         Write(frame, new PngBitmapEncoder(), imagePath);
         Write(frame, new JpegBitmapEncoder { QualityLevel = 90 }, thumbnailPath);
@@ -51,7 +51,7 @@ internal static class ImageComposition
         encoder.Save(stream);
     }
 
-    internal static string GetImageFileName(string originalFileName, string extension)
+    internal static string GetSafeMediaFileName(string originalFileName, string extension)
     {
         var stem = Path.GetFileNameWithoutExtension(originalFileName).TrimEnd(' ', '.');
         var safeStem = stem.Length == 0 || stem.Length + extension.Length > 255 ||

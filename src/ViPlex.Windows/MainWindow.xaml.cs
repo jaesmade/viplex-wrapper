@@ -31,6 +31,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         MediaStrip.ItemsSource = mediaLibrary;
         SetSelector.ItemsSource = sets;
+        previewClock.Tick += PreviewClock_Tick;
     }
 
     private async void Open_Click(object sender, RoutedEventArgs e)
@@ -250,7 +251,7 @@ public partial class MainWindow : Window
 
     private void RefreshPages(int selectedIndex)
     {
-        if (selectedSet is not { Snapshot: var snapshot } set)
+        if (selectedSet is not { } set)
         {
             PageList.ItemsSource = null;
             ProgramSummary.Text = "Open a folder to load or create a program.";
@@ -259,18 +260,15 @@ public partial class MainWindow : Window
         }
 
         var keepEditingImage = editingImage && selectedPage?.Index == selectedIndex;
-        var rows = snapshot.Package.Pages.Select(page =>
-        {
-            set.Replacements.TryGetValue(page.Index, out var imported);
-            return new PageRow(page, imported, imported is null ? snapshot.Previews[page.Index] : imported.Thumbnail,
-                set.IsPagePending(page.Index));
-        }).ToList();
+        var rows = set.Pages.Select(page => CreatePageRow(set, page)).ToList();
         PageList.ItemsSource = rows;
         PageList.SelectedItem = rows.Find(row => row.Index == selectedIndex) ?? rows.FirstOrDefault();
         SetImageEditing(keepEditingImage);
-        ProgramSummary.Text = $"{rows.Count} {(rows.Count == 1 ? "page" : "pages")}  ·  {FormatDuration(rows.Sum(row => (long)row.Duration))}";
+        var total = Math.Min(rows.Sum(row => (decimal)row.Duration * row.RepeatCount), MaxDisplayDuration);
+        ProgramSummary.Text = $"{rows.Count} {(rows.Count == 1 ? "page" : "pages")}  ·  {FormatDuration((long)total)}";
         var pendingPages = rows.Count(row => row.Pending);
-        EditStatus.Text = pendingPages == 0 ? "No pending edits" : $"{pendingPages} {(pendingPages == 1 ? "page" : "pages")} pending";
+        EditStatus.Text = pendingPages > 0 ? $"{pendingPages} {(pendingPages == 1 ? "page" : "pages")} pending"
+            : set.StructurePending ? "Page list changes pending" : "No pending edits";
     }
 
     private void PageSelection_Changed(object sender, SelectionChangedEventArgs e)
@@ -283,6 +281,7 @@ public partial class MainWindow : Window
         PlayButton.Visibility = selectedPage?.Page.Kind == MediaKind.Video ? Visibility.Visible : Visibility.Collapsed;
         Poster.Source = selectedPage?.Page.Kind == MediaKind.Video ? selectedPage.Thumbnail : null;
         SelectPreviewImage();
+        UpdatePageActions();
         if (selectedPage is not { } page)
         {
             return;
@@ -298,6 +297,8 @@ public partial class MainWindow : Window
         SelectedFile.Text = page.FileName;
         SelectedKind.Text = page.Page.Kind.ToString();
         SelectedDuration.Text = FormatDuration(page.Duration);
+        SelectedPlayback.Text = PlaybackSummary(page);
+        SelectedPlayback.Visibility = SelectedPlayback.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         SetReplaceFeedback(page.Pending ? "This page has not been published." : "");
     }
 
@@ -311,6 +312,7 @@ public partial class MainWindow : Window
         if (playing)
         {
             VideoPreview.Pause();
+            previewClock.Stop();
             SetPlaying(false);
             return;
         }
@@ -319,17 +321,26 @@ public partial class MainWindow : Window
         if (VideoPreview.Source is null)
         {
             VideoPreview.Source = new Uri(selectedPage.MediaPath, UriKind.Absolute);
+            VideoPreview.Opacity = selectedPage.Options.FadeIn > 0 ? 0 : 1;
+            VideoPreview.Volume = selectedPage.VideoVolume / 100d;
         }
 
         VideoPreview.Play();
         SetPlaying(true);
+        previewClock.Start();
     }
 
     private void PreviewMedia_Opened(object sender, RoutedEventArgs e)
     {
         if (VideoPreview.Source is not null)
         {
+            if (selectedPage is { Options.TrimStart: > 0 } page)
+            {
+                VideoPreview.Position = TimeSpan.FromMilliseconds(page.Options.TrimStart);
+            }
+
             Poster.Visibility = Visibility.Collapsed;
+            previewClock.Start();
         }
     }
 
@@ -354,6 +365,7 @@ public partial class MainWindow : Window
 
     private void CloseVideo()
     {
+        previewClock.Stop();
         if (VideoPreview.Source is not null)
         {
             VideoPreview.Close();
@@ -361,6 +373,7 @@ public partial class MainWindow : Window
         }
 
         Poster.Visibility = Visibility.Visible;
+        VideoPreview.Opacity = 1;
         SetPlaying(false);
     }
 
@@ -434,7 +447,7 @@ public partial class MainWindow : Window
         {
             var name = imageName ?? Path.GetFileName(fileName);
             var cacheName = imageName is null ? name
-                : ImageComposition.GetImageFileName(imageName, Path.GetExtension(fileName));
+                : ImageComposition.GetSafeMediaFileName(imageName, Path.GetExtension(fileName));
             var copy = Path.Combine(folder, cacheName);
             File.Copy(fileName, copy, overwrite: false);
             var details = MediaInspector.Inspect(copy);
@@ -535,6 +548,19 @@ public partial class MainWindow : Window
         }
 
         set.Replacements[page.Index] = media;
+        if (page.Page.Kind == MediaKind.Video)
+        {
+            var options = page.Draft.Options;
+            var length = media.Details.DurationMilliseconds.GetValueOrDefault();
+            var fits = length >= 100 && (long)options.FadeIn + options.FadeOut <= length;
+            page.Draft.Options = options with
+            {
+                TrimStart = 0,
+                TrimEnd = null,
+                FadeIn = fits ? options.FadeIn : 0,
+                FadeOut = fits ? options.FadeOut : 0
+            };
+        }
         set.Pending.Add(page.Index);
         RefreshPages(page.Index);
     }
@@ -589,7 +615,7 @@ public partial class MainWindow : Window
         var target = Path.Combine(root, "nova");
         var work = Path.Combine(scratchRoot, Guid.NewGuid().ToString("N"));
         var staged = Path.Combine(work, "nova");
-        var changes = set.Replacements.ToDictionary(pair => pair.Key, pair => pair.Value.Replacement);
+        var pages = set.Pages.Select(page => CreatePageRow(set, page)).ToArray();
         var placements = new Dictionary<int, Rect>(set.ImagePlacements);
 
         SetBusy(true);
@@ -597,17 +623,18 @@ public partial class MainWindow : Window
         try
         {
             ShowActivity($"Preparing {set.Name}…", target, inProgress: true);
-            await Task.Run(() =>
+            await Task.Run(async () =>
             {
                 Directory.CreateDirectory(work);
-                var export = CreateExportReplacements(source, work, changes, placements);
-                PackageBuilder.Build(source, staged, mode, export);
+                var export = await CreateExportPagesAsync(work, pages, placements);
+                PackageBuilder.BuildEdited(source, staged, mode, export);
             });
             ShowActivity(writeToUsb ? $"Writing {set.Name} to USB…" : $"Exporting {set.Name}…", target, inProgress: true);
             var result = await WritePreservingSourceAsync(target, setToReload: null,
                 () => PackagePublisher.Publish(staged, root, overwrite, BackupRoot, volumeIdentity));
             set.Mode = mode;
             set.Pending.Clear();
+            set.StructurePending = false;
             set.PublishedImagePlacements = placements;
             RefreshSelectedSet();
             ShowCompletion(writeToUsb ? $"{set.Name} written to USB" : $"{set.Name} exported", result, note: null);
@@ -757,12 +784,7 @@ public partial class MainWindow : Window
 
         try
         {
-            set.Snapshot = await Task.Run(() => ReadSnapshot(output));
-            set.Mode = set.Snapshot.Package.Mode;
-            set.Replacements.Clear();
-            set.Pending.Clear();
-            set.ImagePlacements.Clear();
-            set.PublishedImagePlacements.Clear();
+            set.Reload(await Task.Run(() => ReadSnapshot(output)));
             SetImageEditing(false);
             RefreshSelectedSet();
             return null;
@@ -834,8 +856,10 @@ public partial class MainWindow : Window
 
     private void UpdateActions()
     {
-        SetSelector.IsEnabled = NewSetButton.IsEnabled = PrepareButton.IsEnabled = ImportButton.IsEnabled =
+        SetSelector.IsEnabled = NewSetButton.IsEnabled = RenameSetButton.IsEnabled = PrepareButton.IsEnabled = ImportButton.IsEnabled =
             !busy && selectedSet is not null;
+        PageActions.Visibility = selectedSet is null ? Visibility.Collapsed : Visibility.Visible;
+        UpdatePageActions();
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -889,9 +913,9 @@ public partial class MainWindow : Window
 
     private sealed record SuggestedDestination(string Root, string? VolumeIdentity, bool WriteToUsb);
 
-    private sealed class PresetSet(string name, PackageSnapshot snapshot, SuggestedDestination? destination, bool isNew)
+    private sealed class PresetSet(string name, PackageSnapshot snapshot, SuggestedDestination? destination, bool isNew) : INotifyPropertyChanged
     {
-        public string Name { get; } = name;
+        public string Name { get; private set; } = name;
         public PackageSnapshot Snapshot { get; set; } = snapshot;
         public SuggestedDestination? Destination { get; } = destination;
         public PlaybackMode Mode { get; set; } = snapshot.Package.Mode;
@@ -903,11 +927,39 @@ public partial class MainWindow : Window
         public HashSet<int> Pending { get; } = [];
         public Dictionary<int, Rect> ImagePlacements { get; } = [];
         public Dictionary<int, Rect> PublishedImagePlacements { get; set; } = [];
+        public List<EditablePage> Pages { get; } = OriginalPages(snapshot);
+        public int NextPageKey { get; set; } = snapshot.Package.Pages.Count;
+        public bool StructurePending { get; set; }
 
-        public bool HasPendingEdits => Snapshot.Package.Pages.Any(page => IsPagePending(page.Index));
+        public bool HasPendingEdits => StructurePending || Pages.Any(page => IsPagePending(page.Key));
 
         public bool IsPagePending(int index) => Pending.Contains(index) ||
             ImagePlacements.GetValueOrDefault(index, Rect.Empty) != PublishedImagePlacements.GetValueOrDefault(index, Rect.Empty);
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public void Rename(string value)
+        {
+            Name = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+        }
+
+        public void Reload(PackageSnapshot restored)
+        {
+            Snapshot = restored;
+            Mode = restored.Package.Mode;
+            Replacements.Clear();
+            Pending.Clear();
+            ImagePlacements.Clear();
+            PublishedImagePlacements.Clear();
+            Pages.Clear();
+            Pages.AddRange(OriginalPages(restored));
+            NextPageKey = Pages.Count;
+            StructurePending = false;
+        }
+
+        private static List<EditablePage> OriginalPages(PackageSnapshot source) =>
+            source.Package.Pages.Select(page => new EditablePage(page.Index, page.Index, null)).ToList();
     }
 
     private sealed record ImportedMedia(string Name, MediaDetails Details, MediaReplacement Replacement, BitmapSource? Thumbnail)
@@ -915,13 +967,19 @@ public partial class MainWindow : Window
         public string ApplyLabel => $"Apply {Name} to the selected page";
     }
 
-    private sealed record PageRow(NovaPage Page, ImportedMedia? Imported, BitmapSource? Thumbnail, bool Pending)
+    private sealed record PageRow(EditablePage Draft, NovaPage Page, ImportedMedia? Imported, BitmapSource? Thumbnail, bool Pending)
     {
-        public int Index => Page.Index;
-        public string Name => Page.Name;
+        public PageOptions Options => Draft.Options;
+        public int Index => Draft.Key;
+        public string Name => Options.Name ?? Page.Name;
         public string FileName => Imported?.Name ?? Page.MediaName;
         public string MediaPath => Imported?.Replacement.SourcePath ?? Page.MediaPath;
-        public int Duration => Imported?.Details.DurationMilliseconds ?? Page.DurationMilliseconds;
+        public int SourceDuration => Imported?.Details.DurationMilliseconds ?? Page.DurationMilliseconds;
+        public int Duration => Page.Kind == MediaKind.Image ? Options.ImageDuration ?? SourceDuration
+            : (Options.TrimEnd ?? SourceDuration) - Options.TrimStart;
+        public int RepeatCount => Options.RepeatCount ?? Page.RepeatCount;
+        public int VideoVolume => Options.VideoVolume ?? Page.VideoVolume ?? 100;
+        public PageSchedule Schedule => Options.Schedule ?? Page.Schedule ?? new PageSchedule();
         public string Summary => $"{Page.Kind}  ·  {FormatDuration(Duration)}";
     }
 }

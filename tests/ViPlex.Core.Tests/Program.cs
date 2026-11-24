@@ -117,6 +117,147 @@ try
         Require(Snapshot(exported).SequenceEqual(Snapshot(source.NovaPath)), "No-op changed package bytes or directories");
     });
 
+    Check("An unchanged page list exports an identical package", () =>
+    {
+        var source = Open("multipic");
+        var staged = Path.Combine(scratch, "unchanged-page-list", "nova");
+        PackageBuilder.BuildEdited(source, staged, source.Mode, new PackagePageEdit[] { new(0), new(1) });
+        Require(Snapshot(staged).SequenceEqual(Snapshot(source.NovaPath)), "Unchanged page list altered the package tree");
+    });
+
+    Check("Playlist edits reorder, duplicate, remove and add playable pages", () =>
+    {
+        var first = Open("picture").Pages[0];
+        var removed = Open("multivid").Pages[0];
+        var moved = Open("multipic").Pages[1];
+        var added = Open("videoplayback").Pages[0];
+        var originalPath = Path.Combine(scratch, "editable-playlist", "nova");
+        PackageCreator.Create(originalPath, "Editable Set", PlaybackMode.PlugAndPlay, "admin", "fixture-password", new MediaReplacement[]
+        {
+            new(first.MediaPath, first.ThumbnailPath), new(removed.MediaPath, removed.ThumbnailPath), new(moved.MediaPath, moved.ThumbnailPath),
+        });
+        var source = NovaPackage.Open(originalPath);
+        File.WriteAllText(Path.Combine(originalPath, "keep.txt"), "unrelated package contents");
+        var original = Snapshot(originalPath).ToArray();
+        var originalScenes = Playlist(source)["sceneItems"]!.AsArray();
+        var staged = Path.Combine(scratch, "edited-playlist", "nova");
+
+        PackageBuilder.BuildEdited(source, staged, source.Mode, new PackagePageEdit[]
+        {
+            new(2, Name: "Opening image", ImageDurationMilliseconds: 8_000), new(0), new(2, Name: "Repeated image"),
+            new(null, new(added.MediaPath, added.ThumbnailPath), Name: "Closing clip"),
+        });
+
+        var reopened = NovaPackage.Open(staged);
+        Require(reopened.Pages.Select(page => Path.GetFileName(page.MediaPath)).SequenceEqual(new[]
+        {
+            Path.GetFileName(moved.MediaPath), Path.GetFileName(first.MediaPath), Path.GetFileName(moved.MediaPath), Path.GetFileName(added.MediaPath),
+        }), "Edited pages have the wrong files or playback order");
+        Require(reopened.Pages.Select(page => page.Name).SequenceEqual(new[]
+        {
+            "Opening image", "Page1", "Repeated image", "Closing clip",
+        }), "Renaming one page changed its duplicate or another page");
+        Require(reopened.Pages.Select(page => page.DurationMilliseconds).SequenceEqual(new[] { 8_000, 10_000, 10_000, 100_000 }),
+            "Only the edited image should change its hold time, and the new video should use its natural duration");
+        var scenes = Playlist(reopened)["sceneItems"]!.AsArray();
+        Require(!scenes[0]!.AsObject().ContainsKey("orderNumber") &&
+            scenes.Skip(1).Select(scene => scene!["orderNumber"]!.GetValue<int>()).SequenceEqual(new[] { 1, 2, 3 }), "Edited scenes have stale order numbers");
+        Require(JsonNode.DeepEquals(scenes[0]!["uuid"], originalScenes[2]!["uuid"]) && JsonNode.DeepEquals(scenes[1]!["uuid"], originalScenes[0]!["uuid"]),
+            "Moving a page changed its identity");
+        var firstZone = scenes[0]!["page"]!["widgetContainers"]![0]!;
+        var duplicateZone = scenes[2]!["page"]!["widgetContainers"]![0]!;
+        var firstWidget = firstZone["contents"]!["widgets"]![0]!;
+        var duplicateWidget = duplicateZone["contents"]!["widgets"]![0]!;
+        Require(new[] { (scenes[0]!, scenes[2]!), (firstZone, duplicateZone), (firstWidget, duplicateWidget) }.All(pair =>
+            !JsonNode.DeepEquals(pair.Item1["id"], pair.Item2["id"]) && !JsonNode.DeepEquals(pair.Item1["uuid"], pair.Item2["uuid"])),
+            "Duplicated scene, zone and widget should have new identities");
+        Require(File.ReadAllText(Path.Combine(staged, "keep.txt")) == "unrelated package contents" && Snapshot(originalPath).SequenceEqual(original),
+            "Editing changed unrelated package files or the source package");
+        VerifyCommand(reopened);
+    });
+
+    Check("Replacing an image page with video uses a verified video layout", () =>
+    {
+        var source = Open("picture");
+        var video = Open("videoplayback").Pages[0];
+        var staged = Path.Combine(scratch, "image-to-video", "nova");
+        PackageBuilder.BuildEdited(source, staged, source.Mode, new PackagePageEdit[]
+        {
+            new(0, new(video.MediaPath, video.ThumbnailPath)),
+        });
+        var reopened = NovaPackage.Open(staged);
+        var page = reopened.Pages.Single();
+        Require(page.Kind == MediaKind.Video && page.DurationMilliseconds == video.DurationMilliseconds && page.Name == source.Pages[0].Name,
+            "Video conversion lost the page name or used the wrong media type or duration");
+        VerifyCommand(reopened);
+    });
+
+    Check("A draft placed before its original keeps a stable distinct identity across exports", () =>
+    {
+        var source = Open("multipic");
+        var added = Open("videoplayback").Pages[0];
+        var edits = new PackagePageEdit[]
+        {
+            new(0, DraftIdentity: Guid.Parse("5b591dec-27be-4364-a043-496865b82cb1")), new(0), new(1),
+            new(null, new(added.MediaPath, added.ThumbnailPath), DraftIdentity: Guid.Parse("dc80560f-1e50-4d57-81af-a0b1313eefe9")),
+        };
+        var first = Path.Combine(scratch, "draft-identity-first", "nova");
+        var second = Path.Combine(scratch, "draft-identity-second", "nova");
+        PackageBuilder.BuildEdited(source, first, source.Mode, edits);
+        PackageBuilder.BuildEdited(source, second, source.Mode, edits);
+
+        var original = Playlist(source)["sceneItems"]![0]!;
+        var scenes = Playlist(NovaPackage.Open(first))["sceneItems"]!.AsArray();
+        Require(JsonNode.DeepEquals(scenes[1]!["id"], original["id"]) && JsonNode.DeepEquals(scenes[1]!["uuid"], original["uuid"]),
+            "The earlier duplicate took the source page's identity");
+        Require(!JsonNode.DeepEquals(scenes[0]!["id"], original["id"]) && !JsonNode.DeepEquals(scenes[0]!["uuid"], original["uuid"]),
+            "The draft does not have a fresh identity");
+        Require(JsonNode.DeepEquals(scenes, Playlist(NovaPackage.Open(second))["sceneItems"]),
+            "Exporting the same draft again regenerated a scene, zone or widget identity");
+    });
+
+    Check("Page playback properties survive export and can return to their defaults", () =>
+    {
+        var source = Open("multivid");
+        var staged = Path.Combine(scratch, "page-playback-properties", "nova");
+        var schedule = new PageSchedule(new DateOnly(2026, 11, 24), new DateOnly(2026, 12, 12), PlaybackDays.Monday | PlaybackDays.Friday);
+        PackageBuilder.BuildEdited(source, staged, source.Mode, new PackagePageEdit[]
+        {
+            new(0, RepeatCount: 3, VideoVolume: 37, Schedule: schedule), new(1),
+        });
+
+        var reopened = NovaPackage.Open(staged);
+        var page = reopened.Pages[0];
+        Require(page.RepeatCount == 3 && page.VideoVolume == 37 && page.Schedule == schedule &&
+            page.DurationMilliseconds == source.Pages[0].DurationMilliseconds, "Playback edits did not round-trip with the natural video duration");
+        var scene = Playlist(reopened)["sceneItems"]![0]!;
+        var constraint = scene["constraints"]![0]!;
+        Require(constraint["startTime"]!.GetValue<string>() == "2026-11-24T00:00:00Z+08:00" &&
+            constraint["endTime"]!.GetValue<string>() == "2026-12-12T23:59:59Z+08:00" &&
+            constraint["cron"]![0]!.GetValue<string>() == "0 0 0 ? * 2,6", "Exported dates or weekdays do not use the fixture convention");
+        Require(JsonNode.DeepEquals(Playlist(source)["sceneItems"]![1], Playlist(reopened)["sceneItems"]![1]),
+            "Edits changed the other video page");
+
+        var reset = Path.Combine(scratch, "reset-page-playback-properties", "nova");
+        PackageBuilder.BuildEdited(reopened, reset, reopened.Mode, new PackagePageEdit[]
+        {
+            new(0, RepeatCount: 1, VideoVolume: 100, Schedule: new PageSchedule()), new(1),
+        });
+        Require(JsonNode.DeepEquals(Playlist(source)["sceneItems"], Playlist(NovaPackage.Open(reset))["sceneItems"]),
+            "Reset did not restore the original playback properties");
+    });
+
+    Check("A newly added page without a thumbnail cannot produce an export", () =>
+    {
+        var source = Open("picture");
+        var staged = Path.Combine(scratch, "added-page-without-thumbnail", "nova");
+        RequireFailure(() => PackageBuilder.BuildEdited(source, staged, source.Mode, new PackagePageEdit[]
+        {
+            new(0), new(null, new(source.Pages[0].MediaPath)),
+        }));
+        Require(!Directory.Exists(staged), "A failed page edit left a publishable package");
+    });
+
     Check("Mode switch leaves every file except the command intact", () =>
     {
         var source = Open("multivid");
@@ -324,6 +465,9 @@ static JsonNode Command(string root) =>
 
 static JsonObject ReadCommand(string root) =>
     JsonNode.Parse(Convert.FromBase64String(File.ReadAllText(Path.Combine(root, "command.json"))))!.AsObject();
+
+static JsonObject Playlist(NovaPackage package) =>
+    JsonNode.Parse(File.ReadAllText(Path.Combine(package.NovaPath, "program", package.ProgramName, "playlist0.json")))!.AsObject();
 
 static void VerifyCommand(NovaPackage package)
 {

@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -151,24 +149,6 @@ public partial class MainWindow
             imageDrag = null;
             RenderImagePlacement(drag.Bounds);
         }
-    }
-
-    private static Dictionary<int, MediaReplacement> CreateExportReplacements(NovaPackage source, string work,
-        IReadOnlyDictionary<int, MediaReplacement> changes, IReadOnlyDictionary<int, Rect> placements)
-    {
-        var export = new Dictionary<int, MediaReplacement>(changes);
-        foreach (var (index, placement) in placements)
-        {
-            var page = source.Pages[index];
-            changes.TryGetValue(index, out var replacement);
-            var path = replacement?.SourcePath ?? page.MediaPath;
-            var name = replacement is null ? page.MediaName : Path.GetFileName(path);
-            var directory = Path.Combine(work, "edited-images", index.ToString(CultureInfo.InvariantCulture));
-            var photo = LoadPreview(path, width: 0, height: 0);
-            export[index] = ImageComposition.Save(photo, placement, directory, name);
-        }
-
-        return export;
     }
 
     [Flags]
