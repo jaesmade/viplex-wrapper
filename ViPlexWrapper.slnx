@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ViPlex.Core/ViPlex.Core.csproj" />
+    <Project Path="src/ViPlex.Windows/ViPlex.Windows.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ViPlex.Core.Tests/ViPlex.Core.Tests.csproj" />
+  </Folder>
+</Solution>

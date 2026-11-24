@@ -1,0 +1,84 @@
+<Window x:Class="ViPlex.Windows.PrepareWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Prepare USB" Width="540" SizeToContent="Height" ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner" Background="{StaticResource WindowBrush}"
+        FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="14" UseLayoutRounding="True">
+    <Window.Resources>
+        <Style x:Key="ModeOption" TargetType="RadioButton">
+            <Setter Property="Background" Value="{StaticResource CardBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocus}" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="7" Padding="11">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="27" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Grid Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                    <Ellipse Stroke="{StaticResource MutedBrush}" StrokeThickness="1" />
+                                    <Ellipse x:Name="Selected" Width="8" Height="8" Fill="{StaticResource AccentBrush}" Visibility="Collapsed" />
+                                </Grid>
+                                <ContentPresenter Grid.Column="1" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Surface" Property="Background" Value="{StaticResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Surface" Property="Background" Value="{StaticResource AccentBackgroundBrush}" />
+                                <Setter TargetName="Selected" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="23,20">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="Prepare USB" FontSize="26" FontWeight="SemiBold" />
+            <TextBlock Text="NovaStar T10  ·  256 × 768" Style="{StaticResource MutedText}" Margin="0,4,0,15" />
+            <Border Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="8" Padding="12,9">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock x:Name="ProgramLabel" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="ProgramSummary" Grid.Column="1" Margin="12,0,0,0" Style="{StaticResource MutedText}" />
+                </Grid>
+            </Border>
+            <TextBlock Text="Playback mode" Style="{StaticResource SectionTitle}" Margin="0,16,0,8" />
+            <RadioButton x:Name="PlugAndPlay" GroupName="Mode" Style="{StaticResource ModeOption}" AutomationProperties.Name="Plug and play">
+                <StackPanel>
+                    <TextBlock Text="Plug and play" FontWeight="SemiBold" />
+                    <TextBlock Text="Play from the USB drive while it is inserted." Style="{StaticResource MutedText}" FontSize="12" Margin="0,3,0,0" />
+                </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="CopyAndReplace" GroupName="Mode" Style="{StaticResource ModeOption}" AutomationProperties.Name="Copy and replace">
+                <StackPanel>
+                    <TextBlock Text="Copy and replace" FontWeight="SemiBold" />
+                    <TextBlock Text="Copy the program to the player’s internal storage and play it." Style="{StaticResource MutedText}" FontSize="12" Margin="0,3,0,0" />
+                </StackPanel>
+            </RadioButton>
+            <TextBlock Text="Destination" Style="{StaticResource SectionTitle}" Margin="0,10,0,8" />
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Button x:Name="ChooseFolderButton" Content="Choose export folder…" Click="ChooseFolder_Click" />
+                <Button x:Name="ChooseUsbButton" Grid.Column="2" Content="Choose USB drive…" Click="ChooseUsb_Click" />
+            </Grid>
+            <Border Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="7" Padding="10" Margin="0,8,0,0">
+                <TextBlock x:Name="DestinationLabel" Text="Choose where to place the nova folder." Style="{StaticResource MutedText}" TextWrapping="Wrap" />
+            </Border>
+            <TextBlock x:Name="DestinationError" Foreground="{StaticResource ErrorBrush}" TextWrapping="Wrap" Margin="0,5,0,0" Visibility="Collapsed" />
+        </StackPanel>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" Margin="0,0,8,0" />
+            <Button x:Name="PublishButton" Content="Export folder" Click="Publish_Click" Style="{StaticResource PrimaryButton}"
+                    IsEnabled="False" IsDefault="True" MinWidth="120" />
+        </StackPanel>
+    </Grid>
+</Window>

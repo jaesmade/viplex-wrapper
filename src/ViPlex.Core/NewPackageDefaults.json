@@ -1,0 +1,284 @@
+{
+  "playlist": {
+    "id": 0,
+    "uuid": "",
+    "desc": "",
+    "width": 256.0,
+    "height": 768.0,
+    "thumbpath": "",
+    "importBySn": "",
+    "ImportTaskStatus": 0,
+    "ImportTaskFailCode": 0,
+    "name": "",
+    "pickPolicy": "ORDER",
+    "ProgramModel": 0,
+    "sceneItems": [
+      {
+        "id": 0,
+        "uuid": "",
+        "name": "Preset",
+        "backgroundColor": "#00000000",
+        "backgroundDrawable": "",
+        "backgroundMusic": "",
+        "thumbnail": "",
+        "enable": true,
+        "type": "PAGE",
+        "rules": "TIMES",
+        "duration": 10000,
+        "IsUserBkMusicDuration": 0,
+        "repeatCount": 1,
+        "constraints": [
+          {
+            "startTime": "1970-01-01T00:00:00Z+08:00",
+            "endTime": "4012-01-01T23:59:59Z+08:00",
+            "cron": [
+              "0 0 0 ? * 1,2,3,4,5,6,7"
+            ]
+          }
+        ],
+        "page": {
+          "id": 0,
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "name": "Page1",
+          "inAnimation": {
+            "type": 0,
+            "duration": 1000
+          },
+          "outAnimation": {
+            "type": 0,
+            "duration": 0
+          },
+          "border": {
+            "aspectRatio": {
+              "type": 0,
+              "isLocked": true
+            },
+            "width": 1,
+            "backgroundColor": "#FFFF0000",
+            "foregroundColor": "#FF008000",
+            "style": 0,
+            "styleForExpress": 0,
+            "effects": {
+              "speed": 3,
+              "animation": "MARQUEE_LEFT",
+              "isHeadTail": false,
+              "headTailSpacing": "10",
+              "speedByPixelEnable": false
+            },
+            "AudioListData": {
+              "playPolicy": "ORDER",
+              "audioList": [],
+              "DurationTime": 0
+            }
+          },
+          "thumbpath": "",
+          "widgets": [],
+          "widgetContainers": [
+            {
+              "id": 1000,
+              "uuid": "",
+              "zOrder": 0,
+              "enable": false,
+              "PCType": 1,
+              "DuritionType": 0,
+              "layout": {
+                "x": "0%",
+                "y": "0%",
+                "width": "100%",
+                "height": "100%",
+                "xNum": 0.0,
+                "yNum": 0.0,
+                "widthNum": 100.0,
+                "heightNum": 100.0
+              },
+              "border": {
+                "aspectRatio": {
+                  "type": 0,
+                  "isLocked": true
+                },
+                "width": 1,
+                "backgroundColor": "#FFFF0000",
+                "foregroundColor": "#FF008000",
+                "style": 0,
+                "styleForExpress": 0,
+                "effects": {
+                  "speed": 3,
+                  "animation": "MARQUEE_LEFT",
+                  "isHeadTail": false,
+                  "headTailSpacing": "10",
+                  "speedByPixelEnable": false
+                },
+                "AudioListData": {
+                  "playPolicy": "ORDER",
+                  "audioList": [],
+                  "DurationTime": 0
+                }
+              },
+              "contents": {
+                "widgets": [
+                  {
+                    "id": 100000,
+                    "uuid": "",
+                    "name": "",
+                    "enable": true,
+                    "duration": 10000,
+                    "repeatCount": 1,
+                    "originalType": "PICTURE",
+                    "type": "PICTURE",
+                    "displayRatio": "FULL",
+                    "filesize": 0,
+                    "originalDataSource": "",
+                    "zOrder": 1,
+                    "dataSource": "",
+                    "backgroundColor": "#00000000",
+                    "backgroundDrawable": "",
+                    "backgroundMusic": "",
+                    "layout": {
+                      "x": "0%",
+                      "y": "0%",
+                      "width": "100%",
+                      "height": "100%",
+                      "xNum": 0.0,
+                      "yNum": 0.0,
+                      "widthNum": 100.0,
+                      "heightNum": 100.0
+                    },
+                    "inAnimation": {
+                      "type": 0,
+                      "duration": 1000
+                    },
+                    "outAnimation": {
+                      "type": 0,
+                      "duration": 1000
+                    },
+                    "border": {
+                      "aspectRatio": {
+                        "type": 0,
+                        "isLocked": true
+                      },
+                      "name": "border",
+                      "width": 1,
+                      "backgroundColor": "#FF000000",
+                      "foregroundColor": "#FF008000",
+                      "cornerRadius": "2%",
+                      "style": 0,
+                      "styleForExpress": 0,
+                      "borderThickness": "0px,0px,0px,0px",
+                      "effects": {
+                        "speed": 3,
+                        "animation": "CLOCK_WISE",
+                        "isHeadTail": false,
+                        "headTailSpacing": "10",
+                        "speedByPixelEnable": false
+                      },
+                      "AudioListData": {
+                        "playPolicy": "ORDER",
+                        "audioList": [],
+                        "DurationTime": 0
+                      }
+                    },
+                    "constraints": [
+                      {
+                        "startTime": "1970-01-01T00:00:00Z+8:00",
+                        "endTime": "4012-01-01T23:59:59Z+8:00",
+                        "cron": [
+                          "0 0 0 ? * 1,2,3,4,5,6,7"
+                        ]
+                      }
+                    ],
+                    "ShowPic": "",
+                    "emptyPixelSize": 0,
+                    "singleLine": false
+                  }
+                ],
+                "widgetContainer": [],
+                "zOrder": 0,
+                "DuritionType": 0,
+                "id": 0,
+                "uuid": "00000000-0000-0000-0000-000000000000"
+              },
+              "winId": {
+                "value": 0
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "GroupType": 0,
+    "risplayScreen": "",
+    "Series": "",
+    "equipment": "",
+    "ProgramType": 0
+  },
+  "playSolution": {
+    "version": "1.0.0",
+    "source": {
+      "type": 1,
+      "platform": 2
+    },
+    "uuid": "",
+    "items": [
+      {
+        "id": 1,
+        "name": "local_net_program_task",
+        "layout": {
+          "x": "0%",
+          "y": "0%",
+          "width": "100%",
+          "height": "100%",
+          "xNum": 0.0,
+          "yNum": 0.0,
+          "widthNum": 100.0,
+          "heightNum": 100.0
+        },
+        "zOrder": 1
+      }
+    ],
+    "target": [
+      -1
+    ],
+    "name": "play_solution",
+    "picktype": "DEFAULT",
+    "itemCount": 1,
+    "id": 0
+  },
+  "playRelation": {
+    "id": 0,
+    "name": "playSolutionRelation",
+    "playSolutionSource": "play_solution.json",
+    "relations": [
+      {
+        "taskId": 1,
+        "scheduleConstraints": [
+          {
+            "constraintId": 0,
+            "constraintSource": "schedule_constraint.json",
+            "playlists": [
+              {
+                "playlistId": 0,
+                "playlistSource": "playlist0.json"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "scheduleConstraint": {
+    "id": 0,
+    "name": "schedule_constraint",
+    "constraints": [
+      {
+        "id": 0,
+        "priority": 1000,
+        "name": "schedule_item",
+        "startTime": "1970-01-01T00:00:00Z+08:00",
+        "endTime": "4012-01-01T23:59:59Z+08:00",
+        "cron": [
+          "0 0 0 ? * 1,2,3,4,5,6,7"
+        ]
+      }
+    ]
+  }
+}
